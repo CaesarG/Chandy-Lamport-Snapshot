@@ -3,6 +3,7 @@ package chandy_lamport
 import (
 	"log"
 	"math/rand"
+	"sync"
 )
 
 // Max random delay added to packet delivery
@@ -23,7 +24,10 @@ type Simulator struct {
 	nextSnapshotId int
 	servers        map[string]*Server // key = server ID
 	logger         *Logger
-	// TODO: ADD MORE FIELDS HERE
+	finished       map[int]int
+	snapTokens     map[int]map[string]int
+	snapMessages   map[int][]*SnapshotMessage
+	wgs            map[int]*sync.WaitGroup
 }
 
 func NewSimulator() *Simulator {
@@ -32,6 +36,10 @@ func NewSimulator() *Simulator {
 		0,
 		make(map[string]*Server),
 		NewLogger(),
+		make(map[int]int),
+		make(map[int]map[string]int),
+		make(map[int][]*SnapshotMessage),
+		make(map[int]*sync.WaitGroup),
 	}
 }
 
@@ -108,6 +116,11 @@ func (sim *Simulator) StartSnapshot(serverId string) {
 	sim.nextSnapshotId++
 	sim.logger.RecordEvent(sim.servers[serverId], StartSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
+	sim.wgs[snapshotId] = &sync.WaitGroup{}
+	sim.wgs[snapshotId].Add(1)
+	sim.finished[snapshotId] = 0
+	server := sim.servers[serverId]
+	server.StartSnapshot(snapshotId)
 }
 
 // Callback for servers to notify the simulator that the snapshot process has
@@ -115,6 +128,15 @@ func (sim *Simulator) StartSnapshot(serverId string) {
 func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
+	sim.finished[snapshotId]++
+	if sim.finished[snapshotId] == len(sim.servers) {
+		for _, server := range sim.servers {
+			// release the mem
+			delete(server.totReceived,snapshotId)
+			delete(server.Received,snapshotId)
+		}
+		sim.wgs[snapshotId].Done()
+	}
 }
 
 // Collect and merge snapshot state from all the servers.
@@ -122,5 +144,8 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
 	// TODO: IMPLEMENT ME
+	sim.wgs[snapshotId].Wait()
+	snap.tokens = sim.snapTokens[snapshotId]
+	snap.messages = sim.snapMessages[snapshotId]
 	return &snap
 }

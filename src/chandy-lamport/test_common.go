@@ -29,8 +29,8 @@ const testDir = "test_data"
 func readTopology(fileName string, sim *Simulator) {
 	b, err := ioutil.ReadFile(path.Join(testDir, fileName))
 	checkError(err)
-	lines := strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' })
-
+	// Fix the bug of '\r' when running on Windows
+	lines := strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' || r == '\r' })
 	// Must call this before we start logging
 	sim.logger.NewEpoch()
 
@@ -69,9 +69,9 @@ func readTopology(fileName string, sim *Simulator) {
 
 // Read the events from a ".events" file and inject the events into the simulator.
 // The expected format of the file is as follows:
-// 	- "tick N" indicates N time steps has elapsed (default N = 1)
 // 	- "send N1 N2 1" indicates that N1 sends 1 token to N2
 // 	- "snapshot N2" indicates the beginning of the snapshot process, starting on N2
+//	- "tick N" indicates N time steps has elapsed (default N = 1)
 // Note that concurrent events are indicated by the lack of ticks between the events.
 // This function waits until all the snapshot processes have terminated before returning
 // the snapshots collected.
@@ -82,8 +82,8 @@ func injectEvents(fileName string, sim *Simulator) []*SnapshotState {
 	snapshots := make([]*SnapshotState, 0)
 	getSnapshots := make(chan *SnapshotState, 100)
 	numSnapshots := 0
-
-	lines := strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' })
+	// Fix the bug of '\r' when running on Windows
+	lines := strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' || r == '\r' })
 	for _, line := range lines {
 		// Ignore comments
 		if strings.HasPrefix("#", line) {
@@ -149,7 +149,8 @@ func readSnapshot(fileName string) *SnapshotState {
 	b, err := ioutil.ReadFile(path.Join(testDir, fileName))
 	checkError(err)
 	snapshot := SnapshotState{0, make(map[string]int), make([]*SnapshotMessage, 0)}
-	lines := strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' })
+	// Fix the bug of '\r' when running on Windows
+	lines := strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' || r == '\r' })
 	for _, line := range lines {
 		// Ignore comments
 		if strings.HasPrefix(line, "#") {
